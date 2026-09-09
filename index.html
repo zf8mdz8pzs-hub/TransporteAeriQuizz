@@ -137,6 +137,7 @@ table.score td.n{text-align:right}
 table.score td.sc{text-align:right;font-weight:600}
 table.score .nm{color:var(--ink)}
 
+.wx{font-size:.68rem;font-weight:700;color:#fff;background:var(--accent);border-radius:2px;padding:.05rem .28rem;margin-left:.25rem;vertical-align:.08em}
 .rv{border-top:1px solid #e6e1d6;padding:.9rem 0 0;margin-top:.9rem}
 .rv h3{font-size:.78rem;color:var(--ink-soft);font-weight:600;margin:0 0 .7rem}
 .rvq{font-family:Charter,"Bitstream Charter","Iowan Old Style",Georgia,serif;font-size:.95rem;
@@ -183,6 +184,8 @@ const EXPLAIN = ["The stall angle is set by the geometry of the section and wher
 
 const $ = s => document.querySelector(s);
 const PENALTY = 0.33, PASS = 5, PER_BLO = 10;
+const WEIGHT = {1:2, 3:2};          // these blocks count double towards the average
+const wt = b => WEIGHT[b] || 1;
 const PRESETS = [
   {id:'a', name:'First test',  blos:[1,4,6,8]},
   {id:'b', name:'Second test', blos:[2,3,5,7]}
@@ -368,25 +371,28 @@ function finishExam(){
     const r = per.get(b);
     return { blo:b, ...r, score:(r.right - PENALTY*r.wrong) * (PER_BLO / (r.n || PER_BLO)) };
   });
-  const avg = scores.reduce((s,x) => s + x.score, 0) / scores.length;
+  const totalW = scores.reduce((s,x) => s + wt(x.blo), 0);
+  const avg = scores.reduce((s,x) => s + x.score * wt(x.blo), 0) / totalW;
   const pass = avg >= PASS;
+  const heavy = scores.filter(x => wt(x.blo) > 1).map(x => 'BLO ' + x.blo);
 
   $('#stage').innerHTML = `
     <div class="banner ${pass?'pass':'fail'}">
       <div class="big">${fmt(avg)}</div>
       <div class="lbl">${pass ? 'Passed' : 'Failed'}</div>
-      <div class="sub">Average across ${scores.length} blocks — you need ${fmt(PASS)}</div>
+      <div class="sub">${heavy.length ? `Weighted average — ${heavy.join(' and ')} count${heavy.length===1?'s':''} double` : `Average across ${scores.length} blocks`} — you need ${fmt(PASS)}</div>
     </div>
     <article class="sheet">
       <table class="score">
         <tr><th>Block</th><th class="n">Right</th><th class="n">Wrong</th><th class="n">Blank</th><th class="n">Score</th></tr>
         ${scores.map(s => `<tr>
-          <td class="nm">BLO ${s.blo} — ${BLO_NAMES[s.blo]}</td>
+          <td class="nm">BLO ${s.blo} — ${BLO_NAMES[s.blo]}${wt(s.blo)>1?` <span class="wx">×${wt(s.blo)}</span>`:''}</td>
           <td class="n">${s.right}</td><td class="n">${s.wrong}</td><td class="n">${s.blank}</td>
           <td class="sc">${fmt(s.score)}</td></tr>`).join('')}
       </table>
       <p class="note" style="color:var(--ink-soft);margin:.9rem 0 0">
-        Each right answer is +1, each wrong one −${PENALTY}, blanks count zero. Each block is out of ${PER_BLO}.</p>
+        Each right answer is +1, each wrong one −${PENALTY}, blanks count zero. Each block is out of ${PER_BLO}.
+        ${heavy.length ? `${heavy.join(' and ')} carr${heavy.length===1?'ies':'y'} twice the weight, so the average divides by ${totalW} rather than ${scores.length}.` : ''}</p>
       ${wrongList.length ? `<div class="rv"><h3>${wrongList.length} to go over</h3>
         ${wrongList.map(w => `<p class="rvq">${w.q.stem}
           <span class="yours">${w.a === null ? 'You left this blank.' : 'You picked: ' + w.q.opts[state.exam.orders[w.k][w.a]]}</span>
@@ -457,6 +463,7 @@ function syncFilters(){
   $('#startexam').disabled = n === 0;
   $('#examsub').textContent = n
     ? `${PER_BLO} questions from each of ${n} block${n===1?'':'s'} — ${n*PER_BLO} in total, marked +1 / −${PENALTY}`
+      + ([...state.blos].some(b => wt(b) > 1) ? `, ${[...state.blos].filter(b => wt(b)>1).map(b=>'BLO '+b).join(' and ')} counting double` : '')
     : 'Pick at least one block first';
 }
 
