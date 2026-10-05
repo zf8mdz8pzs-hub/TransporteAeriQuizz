@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Aerospace Technology — BLO drill</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#16202b">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="BLO Quiz">
 <style>
 :root{
   --shell:#16202b; --shell-2:#1d2a37; --line:#2c3d4d;
@@ -147,6 +155,11 @@ table.score .nm{color:var(--ink)}
 .rvq .src{display:block;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   font-size:.68rem;color:#9aa6b0;margin-top:.25rem}
 
+.toast{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  display:flex;align-items:center;gap:.9rem;background:var(--paper);color:var(--ink);border-radius:4px;
+  padding:.6rem .6rem .6rem .9rem;font-size:.85rem;box-shadow:0 4px 18px rgba(0,0,0,.45);z-index:10;white-space:nowrap}
+.toast button{background:var(--ink);color:var(--paper);border:0;border-radius:3px;font:inherit;font-weight:600;
+  padding:.4rem .7rem;cursor:pointer}
 .done,.blank{background:var(--paper);color:var(--ink);border-radius:5px;padding:2rem 1.3rem;text-align:center}
 .done h2{margin:.2rem 0 .6rem;font-size:1.2rem}
 .done p,.blank p{margin:0 0 1.2rem;color:var(--ink-soft)}
@@ -496,6 +509,19 @@ $('#toggle').addEventListener('click', () => {
 });
 
 buildFilters(); buildPool(); renderQuestion();
+
+/* ===================== offline support ===================== */
+if('serviceWorker' in navigator && window.isSecureContext){
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('message', ev => {
+    if(ev.data !== 'updated' || document.querySelector('.toast')) return;
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.innerHTML = 'A new version is ready <button>Reload</button>';
+    t.querySelector('button').addEventListener('click', () => location.reload());
+    document.body.appendChild(t);
+  });
+}
 
 </script>
 </body>
