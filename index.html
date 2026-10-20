@@ -126,9 +126,9 @@ body{background:var(--shell);color:var(--paper);
 .navbtn:disabled{opacity:.4;cursor:default}
 .navbtn.solid{background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:600}
 .navbtn.solid:hover{background:#26333f}
-.dots{display:flex;flex-wrap:wrap;gap:3px;margin-top:1rem}
-.dot{width:.65rem;height:.65rem;border-radius:2px;background:#e0dbcf;border:0;padding:0;cursor:pointer}
-.dot.done{background:var(--accent)}
+.dots{display:flex;flex-wrap:wrap;gap:5px;margin-top:1.1rem}
+.dot{flex:none;width:1.15rem;height:1.15rem;border-radius:3px;background:#e0dbcf;border:0;padding:0;margin:0;cursor:pointer}
+.dot.filled{background:var(--accent)}
 .dot.here{outline:2px solid var(--ink);outline-offset:1px}
 
 .banner{border-radius:5px;padding:1.3rem;text-align:center;margin-bottom:.9rem}
@@ -155,6 +155,35 @@ table.score .nm{color:var(--ink)}
 .rvq .src{display:block;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   font-size:.68rem;color:#9aa6b0;margin-top:.25rem}
 
+.baracts{display:flex;gap:1.1rem}
+.hist h2{font-size:.78rem;font-weight:600;color:var(--ink-soft);margin:0 0 .65rem}
+.tgroup + .tgroup{border-top:1px solid #e6e1d6;margin-top:1rem;padding-top:1rem}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+.stat b{display:block;font-size:1.15rem;font-variant-numeric:tabular-nums;color:var(--ink);line-height:1.2}
+.stat span{font-size:.7rem;color:var(--ink-soft)}
+.trend{display:block;width:100%;height:auto;margin:.8rem 0 0}
+.att{border-top:1px solid #e6e1d6}
+.att:first-of-type{border-top:0}
+.atthead{display:flex;align-items:center;gap:.75rem;width:100%;background:none;border:0;padding:.75rem 0;
+  font:inherit;color:var(--ink);text-align:left;cursor:pointer}
+.attscore{flex:none;width:3.5rem;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;
+  border-radius:3px;padding:.3rem 0;font-size:.95rem}
+.attscore.pass{background:var(--right-bg);color:#14522d}
+.attscore.fail{background:var(--wrong-bg);color:#7d1c11}
+.attmeta{flex:1;font-size:.88rem;line-height:1.35}
+.attmeta small{display:block;color:var(--ink-soft);font-size:.74rem}
+.chev{flex:none;color:#9aa6b0;font-size:.8rem;transition:transform .15s}
+.att.open .chev{transform:rotate(90deg)}
+.attbody{padding:0 0 1rem}
+.attbody[hidden]{display:none}
+.btnrow{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.8rem}
+.smallbtn{background:#fff;border:1px solid #ddd7c9;color:var(--ink);border-radius:3px;font:inherit;
+  font-size:.82rem;padding:.45rem .75rem;cursor:pointer}
+.smallbtn:hover{border-color:var(--accent)}
+.smallbtn.danger{color:var(--wrong);border-color:#e7b8b1}
+.saved{margin:.9rem 0 0;font-size:.78rem;color:var(--ink-soft)}
+.saved.bad{color:var(--wrong)}
+.smallbtn:focus-visible,.atthead:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .toast{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
   display:flex;align-items:center;gap:.9rem;background:var(--paper);color:var(--ink);border-radius:4px;
   padding:.6rem .6rem .6rem .9rem;font-size:.85rem;box-shadow:0 4px 18px rgba(0,0,0,.45);z-index:10;white-space:nowrap}
@@ -180,7 +209,10 @@ table.score .nm{color:var(--ink)}
 <div class="wrap">
   <div class="bar">
     <h1>Aerospace Technology <span>· EETAC past papers</span></h1>
-    <button class="linkish" id="toggle">Choose BLO</button>
+    <span class="baracts">
+      <button class="linkish" id="histbtn">History</button>
+      <button class="linkish" id="toggle">Choose BLO</button>
+    </span>
   </div>
   <div class="tape">
     <div class="tape-track"><div class="tape-fill" id="fill"></div></div>
@@ -307,16 +339,18 @@ function startExam(){
     picked.push(...shuffled(pool).slice(0, PER_BLO));
   }
   state.exam = { qs:picked, orders:picked.map(() => shuffled([0,1,2,3])),
-                 ans:picked.map(() => null), i:0, blos, graded:false };
+                 ans:picked.map(() => null), i:0, blos, graded:false, started:Date.now() };
   state.mode = 'exam';
   $('#filters').hidden = true;
   $('#toggle').textContent = 'Leave exam';
+  $('#histbtn').hidden = true;
   renderExam();
 }
 
 function leaveExam(){
   state.mode = 'practice'; state.exam = null;
   $('#toggle').textContent = 'Choose BLO';
+  $('#histbtn').hidden = false; $('#histbtn').textContent = 'History';
   resetScore(); buildPool(); renderQuestion();
 }
 
@@ -356,7 +390,7 @@ function renderExam(){
 
   const dots = $('#dots');
   dots.innerHTML = e.qs.map((_,k) =>
-    `<button class="dot ${e.ans[k]!==null?'done':''} ${k===e.i?'here':''}" data-k="${k}"
+    `<button class="dot ${e.ans[k]!==null?'filled':''} ${k===e.i?'here':''}" data-k="${k}"
       aria-label="Go to question ${k+1}"></button>`).join('');
   dots.addEventListener('click', ev => {
     const d = ev.target.closest('.dot'); if(!d) return;
@@ -389,6 +423,15 @@ function finishExam(){
   const pass = avg >= PASS;
   const heavy = scores.filter(x => wt(x.blo) > 1).map(x => 'BLO ' + x.blo);
 
+  e.graded = true;
+  const p = presetOf(e.blos);
+  const saved = saveAttempt({
+    id: Date.now(), at: Date.now(), secs: Math.round((Date.now() - e.started) / 1000),
+    test: p ? p.name : 'Custom', blos: e.blos, avg, pass,
+    per: scores.map(x => ({blo:x.blo, r:x.right, w:x.wrong, b:x.blank, s:x.score})),
+    items: e.qs.map((q,k) => [q.id, e.ans[k] === null ? -1 : e.orders[k][e.ans[k]]])
+  });
+
   $('#stage').innerHTML = `
     <div class="banner ${pass?'pass':'fail'}">
       <div class="big">${fmt(avg)}</div>
@@ -413,14 +456,224 @@ function finishExam(){
           <span class="src">BLO ${w.q.blo} · page ${w.q.page} of the PDF, ${w.q.exam}</span>
           ${w.q.e >= 0 ? `<span class="why">${EXPLAIN[w.q.e]}</span>` : ''}</p>`).join('')}
       </div>` : '<p class="note" style="color:var(--right);margin:.9rem 0 0">Everything correct.</p>'}
+      <p class="saved ${saved ? '' : 'bad'}">${saved
+        ? 'Saved to your history.'
+        : "Couldn't save this attempt — the browser is blocking storage (private browsing does this)."}</p>
       <button class="next" id="again2">Sit another exam</button>
       <button class="next" id="quitexam" style="margin-top:.6rem;background:#fff;color:var(--ink);border:1px solid #ddd7c9">Back to practice</button>
     </article>`;
   $('#again2').addEventListener('click', startExam);
   $('#quitexam').addEventListener('click', leaveExam);
+  $('#histbtn').hidden = false;
   $('#fill').style.width = '100%';
   $('#read').innerHTML = `Exam finished · <b>${fmt(avg)}</b>`;
   window.scrollTo({top:0, behavior:'instant'});
+}
+
+/* ======================== history ======================= */
+const STORE = 'blo-quiz-attempts-v1';
+const QBYID = new Map(QUESTIONS.map(q => [q.id, q]));
+const presetOf = blos => PRESETS.find(p => p.blos.length === blos.length && p.blos.every(b => blos.includes(b)));
+
+function loadAttempts(){
+  try { const v = JSON.parse(localStorage.getItem(STORE)); return Array.isArray(v) ? v : []; }
+  catch { return []; }
+}
+function storeAttempts(list){
+  try { localStorage.setItem(STORE, JSON.stringify(list)); return true; } catch { return false; }
+}
+function saveAttempt(rec){ const l = loadAttempts(); l.push(rec); return storeAttempts(l); }
+if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+const fmtDate = t => new Date(t).toLocaleString('en-GB',
+  {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
+const fmtDur = s => s >= 3600 ? `${Math.floor(s/3600)} h ${Math.round(s%3600/60)} min`
+                              : `${Math.floor(s/60)} min ${String(s%60).padStart(2,'0')} s`;
+
+function trendSvg(list){
+  const xs = list.slice(-20), W = 300, H = 84, pad = 6;
+  const lo = Math.min(0, ...xs.map(a => a.avg)), hi = 10;
+  const y = v => pad + (hi - v) / (hi - lo) * (H - 2*pad);
+  const bw = W / Math.max(xs.length, 10);
+  const bars = xs.map((a,i) => {
+    const y0 = y(0), y1 = y(a.avg);
+    return `<rect x="${(i*bw + bw*.2).toFixed(1)}" y="${Math.min(y0,y1).toFixed(1)}" width="${(bw*.6).toFixed(1)}"
+      height="${Math.max(1.5, Math.abs(y1-y0)).toFixed(1)}" rx="1.5" fill="${a.pass ? '#1c6b3c' : '#a92617'}"><title>${fmt(a.avg)}</title></rect>`;
+  }).join('');
+  return `<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="Scores of the last ${xs.length} attempts">
+    <line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="#d6d0c2"/>
+    <line x1="0" x2="${W}" y1="${y(5)}" y2="${y(5)}" stroke="#5b6a78" stroke-dasharray="3 3"/>
+    <text x="${W-2}" y="${y(5)-3}" text-anchor="end" font-size="9" fill="#5b6a78">pass 5.00</text>${bars}</svg>`;
+}
+
+function mistakesOf(rec){
+  return rec.items.map(([id, pick]) => ({q: QBYID.get(id), pick}))
+                  .filter(x => x.q && x.pick !== x.q.correct);
+}
+
+function reviewHtml(rec){
+  const m = mistakesOf(rec);
+  if(!m.length) return '<p class="saved" style="color:var(--right)">Nothing missed in this attempt.</p>';
+  return `<div class="rv"><h3>${m.length} missed or left blank</h3>${m.map(({q,pick}) => `<p class="rvq">${q.stem}
+    <span class="yours">${pick === -1 ? 'You left this blank.' : 'You picked: ' + q.opts[pick]}</span>
+    <span class="theirs">Correct: ${q.opts[q.correct]}</span>
+    <span class="src">BLO ${q.blo} · page ${q.page} of the PDF, ${q.exam}</span>
+    ${q.e >= 0 ? `<span class="why">${EXPLAIN[q.e]}</span>` : ''}</p>`).join('')}</div>`;
+}
+
+function attemptHtml(rec){
+  return `<div class="att" data-id="${rec.id}">
+    <button class="atthead" aria-expanded="false">
+      <span class="attscore ${rec.pass ? 'pass' : 'fail'}">${fmt(rec.avg)}</span>
+      <span class="attmeta">${escapeHtml(rec.test)} — ${rec.pass ? 'passed' : 'failed'}
+        <small>${fmtDate(rec.at)} · ${fmtDur(rec.secs)}</small></span>
+      <span class="chev" aria-hidden="true">▶</span>
+    </button>
+    <div class="attbody" hidden>
+      <table class="score">
+        <tr><th>Block</th><th class="n">Right</th><th class="n">Wrong</th><th class="n">Blank</th><th class="n">Score</th></tr>
+        ${rec.per.map(x => `<tr><td class="nm">BLO ${x.blo} — ${BLO_NAMES[x.blo] || ''}${wt(x.blo)>1 ? ' <span class="wx">×2</span>' : ''}</td>
+          <td class="n">${x.r}</td><td class="n">${x.w}</td><td class="n">${x.b}</td><td class="sc">${fmt(x.s)}</td></tr>`).join('')}
+      </table>
+      <div class="btnrow">
+        <button class="smallbtn" data-act="review">Show mistakes</button>
+        <button class="smallbtn" data-act="drill">Drill the mistakes</button>
+        <button class="smallbtn danger" data-act="delete">Delete</button>
+      </div>
+      <div class="revslot"></div>
+    </div>
+  </div>`;
+}
+
+function groupHtml(name, list){
+  const best = Math.max(...list.map(a => a.avg));
+  const passed = list.filter(a => a.pass).length;
+  const last = list[list.length - 1];
+  return `<div class="tgroup"><h2>${escapeHtml(name)}</h2>
+    <div class="stats">
+      <div class="stat"><b>${list.length}</b><span>attempts</span></div>
+      <div class="stat"><b>${fmt(last.avg)}</b><span>latest</span></div>
+      <div class="stat"><b>${fmt(best)}</b><span>best</span></div>
+      <div class="stat"><b>${passed}/${list.length}</b><span>passed</span></div>
+    </div>${trendSvg(list)}</div>`;
+}
+
+function renderHistory(){
+  state.mode = 'history';
+  $('#filters').hidden = true; $('#toggle').textContent = 'Choose BLO';
+  $('#histbtn').hidden = false; $('#histbtn').textContent = 'Close';
+  const list = loadAttempts().sort((a,b) => a.at - b.at);
+  $('#fill').style.width = '0%';
+  $('#read').textContent = `${list.length} exam${list.length===1?'':'s'} on record`;
+
+  const foot = `<div class="btnrow" style="margin-top:1.1rem">
+      <button class="smallbtn" id="hexport" ${list.length ? '' : 'disabled'}>Export backup</button>
+      <button class="smallbtn" id="himport">Import backup</button>
+      ${list.length ? '<button class="smallbtn danger" id="hclear">Delete all</button>' : ''}
+      <input type="file" id="hfile" accept="application/json,.json" hidden>
+    </div>`;
+
+  if(!list.length){
+    $('#stage').innerHTML = `<div class="blank"><p>No exams on record yet.</p>
+      <p>Every exam you finish is saved here automatically.</p>${foot}</div>`;
+  } else {
+    const order = [...PRESETS.map(p => p.name), 'Custom'];
+    const names = [...new Set(list.map(a => a.test))].sort((a,b) => order.indexOf(a) - order.indexOf(b));
+    $('#stage').innerHTML = `
+      <article class="sheet hist">${names.map(n => groupHtml(n, list.filter(a => a.test === n))).join('')}</article>
+      <article class="sheet hist" style="margin-top:.9rem;padding-top:.6rem;padding-bottom:.9rem">
+        ${[...list].reverse().map(attemptHtml).join('')}
+        ${foot}
+      </article>
+      <p class="hint" style="display:block">Saved on this device only. Export a backup now and then.</p>`;
+  }
+  bindHistory();
+  window.scrollTo({top:0, behavior:'instant'});
+}
+
+function bindHistory(){
+  const stage = $('#stage');
+  stage.querySelectorAll('.att').forEach(el => {
+    const id = +el.dataset.id;
+    el.querySelector('.atthead').addEventListener('click', ev => {
+      const body = el.querySelector('.attbody'), open = body.hidden;
+      body.hidden = !open; el.classList.toggle('open', open);
+      ev.currentTarget.setAttribute('aria-expanded', String(open));
+    });
+    el.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+      const rec = loadAttempts().find(a => a.id === id); if(!rec) return;
+      if(b.dataset.act === 'review'){
+        const slot = el.querySelector('.revslot');
+        if(slot.innerHTML){ slot.innerHTML = ''; b.textContent = 'Show mistakes'; }
+        else { slot.innerHTML = reviewHtml(rec); b.textContent = 'Hide mistakes'; }
+      }
+      if(b.dataset.act === 'drill'){
+        const qs = mistakesOf(rec).map(x => x.q);
+        if(!qs.length) return alert('Nothing to drill — you got every question in this attempt.');
+        closeHistory(qs);
+      }
+      if(b.dataset.act === 'delete' && confirm('Delete this attempt from your history?')){
+        storeAttempts(loadAttempts().filter(a => a.id !== id)); renderHistory();
+      }
+    }));
+  });
+  const ex = $('#hexport'), im = $('#himport'), cl = $('#hclear'), fi = $('#hfile');
+  if(ex) ex.addEventListener('click', exportAttempts);
+  if(im) im.addEventListener('click', () => fi.click());
+  if(fi) fi.addEventListener('change', () => { if(fi.files[0]) importAttempts(fi.files[0]); });
+  if(cl) cl.addEventListener('click', () => {
+    if(confirm('Delete every saved attempt? Export a backup first if you might want them back.')){
+      storeAttempts([]); renderHistory();
+    }
+  });
+}
+
+function closeHistory(drillList){
+  state.mode = 'practice';
+  $('#histbtn').textContent = 'History';
+  if(drillList){ resetScore(); buildPool(drillList); }
+  else if(state.locked) state.i++;
+  renderQuestion();
+}
+
+function exportAttempts(){
+  const blob = new Blob([JSON.stringify({app:'blo-quiz', version:1, attempts:loadAttempts()})],
+                        {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `blo-quiz-history-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+
+function cleanAttempt(a){
+  if(!a || typeof a !== 'object') return null;
+  const num = v => (typeof v === 'number' && isFinite(v)) ? v : null;
+  const id = num(a.id), at = num(a.at), avg = num(a.avg);
+  if(id === null || at === null || avg === null || !Array.isArray(a.per) || !Array.isArray(a.items)) return null;
+  const blos = (Array.isArray(a.blos) ? a.blos : []).filter(b => Number.isInteger(b) && b >= 1 && b <= 8);
+  const p = presetOf(blos);
+  return {
+    id, at, avg, pass: avg >= PASS, secs: num(a.secs) || 0, blos,
+    test: p ? p.name : 'Custom',
+    per: a.per.map(x => ({blo: Number.isInteger(x.blo) ? x.blo : 0, r: num(x.r) || 0, w: num(x.w) || 0,
+                          b: num(x.b) || 0, s: num(x.s) || 0})).filter(x => x.blo >= 1 && x.blo <= 8),
+    items: a.items.filter(it => Array.isArray(it) && typeof it[0] === 'string' && Number.isInteger(it[1]))
+                  .map(it => [it[0], it[1]])
+  };
+}
+
+function importAttempts(file){
+  file.text().then(text => {
+    const d = JSON.parse(text);
+    const incoming = (Array.isArray(d) ? d : d.attempts).map(cleanAttempt).filter(Boolean);
+    const cur = loadAttempts(), have = new Set(cur.map(a => a.id));
+    const add = incoming.filter(a => !have.has(a.id));
+    storeAttempts(cur.concat(add));
+    alert(add.length ? `Imported ${add.length} attempt${add.length===1?'':'s'}.`
+                     : 'Nothing new in that file — those attempts are already here.');
+    renderHistory();
+  }).catch(() => alert("That file isn't a history backup from this app."));
 }
 
 /* ======================== picker ======================== */
@@ -501,11 +754,19 @@ document.addEventListener('keydown', ev => {
 
 $('#toggle').addEventListener('click', () => {
   if(state.mode === 'exam'){
-    if(confirm('Leave the exam? Your answers will be lost.')) leaveExam();
+    if(state.exam && state.exam.graded) leaveExam();
+    else if(confirm('Leave the exam? Your answers will be lost.')) leaveExam();
     return;
   }
+  if(state.mode === 'history') closeHistory();
   const f = $('#filters'); f.hidden = !f.hidden;
   $('#toggle').textContent = f.hidden ? 'Choose BLO' : 'Hide';
+});
+
+$('#histbtn').addEventListener('click', () => {
+  if(state.mode === 'history') return closeHistory();
+  if(state.mode === 'exam'){ state.mode = 'practice'; state.exam = null; $('#toggle').textContent = 'Choose BLO'; }
+  renderHistory();
 });
 
 buildFilters(); buildPool(); renderQuestion();
