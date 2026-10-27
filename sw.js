@@ -1,7 +1,7 @@
-// Offline cache for the BLO quiz.
-// Serves the saved copy instantly (works with no connection), then checks
-// GitHub for a newer version in the background and tells the page if there is one.
-const CACHE = 'blo-quiz-v1';
+// Offline support for the BLO quiz.
+// Online: the page always comes fresh from the network, so new uploads show up straight away.
+// Offline (or a very slow network): the last saved copy is used instead.
+const CACHE = 'blo-quiz-v2';
 const CORE = ['./', './index.html', './manifest.webmanifest',
               './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
@@ -17,30 +17,39 @@ self.addEventListener('activate', e => {
   );
 });
 
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(v => { clearTimeout(t); resolve(v); }, err => { clearTimeout(t); reject(err); });
+  });
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    const cached = (await cache.match(req, { ignoreSearch: true })) ||
-                   (req.mode === 'navigate' ? await cache.match('./index.html') : undefined);
+    const isPage = req.mode === 'navigate' || /\/(index\.html)?$/.test(new URL(req.url).pathname);
 
-    const fresh = fetch(req, { cache: 'no-cache' }).then(async res => {
-      if (res && res.ok) {
-        const tag = r => r.headers.get('etag') || r.headers.get('last-modified');
-        const before = cached && tag(cached);
-        const after = tag(res);
-        await cache.put(req, res.clone());
-        if (req.mode === 'navigate' && before && after && before !== after) {
-          (await self.clients.matchAll()).forEach(c => c.postMessage('updated'));
-        }
-      }
+    if (isPage) {
+      try {
+        const res = await withTimeout(fetch(req, { cache: 'no-store' }), 8000);
+        if (res && res.ok) { await cache.put('./index.html', res.clone()); return res; }
+      } catch (_) { /* offline or too slow: fall through to the saved copy */ }
+      return (await cache.match('./index.html')) ||
+             new Response('Offline, and this page has not been saved yet.',
+                          { status: 503, headers: { 'Content-Type': 'text/plain' } });
+    }
+
+    const cached = await cache.match(req, { ignoreSearch: true });
+    if (cached) return cached;
+    try {
+      const res = await fetch(req);
+      if (res && res.ok) cache.put(req, res.clone());
       return res;
-    }).catch(() => undefined);
-
-    if (cached) { e.waitUntil(fresh); return cached; }
-    return (await fresh) || new Response('Offline, and this page has not been saved yet.',
-                                         { status: 503, headers: { 'Content-Type': 'text/plain' } });
+    } catch (_) {
+      return new Response('', { status: 504 });
+    }
   })());
 });
