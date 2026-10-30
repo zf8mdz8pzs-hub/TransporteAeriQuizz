@@ -339,6 +339,10 @@ const EXPLAIN = ["The stall angle is set by the geometry of the section and wher
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const PENALTY = 0.33, PASS = 5, PER_BLO = 10;
+/* Course formula: test grade = 15 − 50 / (BLO mean). A mean below 3.33 doesn't count (grade 0).
+   Grade 5 happens exactly at a mean of 5, so "pass" is the same either way. */
+const MIN_MEAN = 10 / 3;
+const testGrade = mean => mean < MIN_MEAN - 1e-9 ? 0 : Math.min(10, Math.max(0, 15 - 50 / mean));
 const WEIGHT = {1:2, 3:2};
 const wt = b => WEIGHT[b] || 1;
 const PRESETS = [
@@ -688,7 +692,8 @@ function renderExamTab(){
       <div class="row"><span class="r-main r-title">Right answer</span><span class="r-trail">+1</span></div>
       <div class="row"><span class="r-main r-title">Wrong answer</span><span class="r-trail">−${PENALTY}</span></div>
       <div class="row"><span class="r-main r-title">Left blank</span><span class="r-trail">0</span></div>
-      <div class="row"><span class="r-main r-title">Pass mark</span><span class="r-trail">${fmt(PASS)} average</span></div>
+      <div class="row"><span class="r-main r-title">Test grade</span><span class="r-trail">15 − 50 / mean</span></div>
+      <div class="row"><span class="r-main r-title">Pass mark</span><span class="r-trail">grade ${fmt(PASS)}</span></div>
     </div><div class="sec-foot">Each block is scored out of ${PER_BLO}.${heavy.length ? ` ${heavy.map(b => 'BLO ' + b).join(' and ')} count${heavy.length === 1 ? 's' : ''} double in the average.` : ''}</div></div>
     <button class="btn" id="eStart" ${blos.length ? '' : 'disabled'}>${I.play}Start Exam</button>`);
   $$('#tab-exam .seg button').forEach(b => b.onclick = () => { S.examPreset = b.dataset.p; renderExamTab(); });
@@ -813,13 +818,14 @@ function resultBody(rec, mistakes){
       <div class="row"><span class="r-main"><span class="r-title">Grade without wrong answers</span>
         <span class="r-sub" style="display:block">${plural(wrongTotal,'wrong answer')} counted as 0 instead of −${PENALTY}</span></span>
         <span class="pill ${passClean ? 'green' : 'red'}">${passClean ? 'Pass' : 'Fail'}</span>
-        <span class="r-trail" style="font-weight:600;color:var(--label)">${fmt(avgClean)}</span></div>
-    </div><div class="sec-foot">Wrong answers cost you ${fmt(avgClean - rec.avg)} points of the average.${!rec.pass && passClean ? ' Leaving the ones you weren’t sure about blank would have been enough to pass.' : ''}</div></div>` : '';
+        <span class="r-trail" style="font-weight:600;color:var(--label)">${fmt(testGrade(avgClean))}</span></div>
+    </div><div class="sec-foot">Wrong answers cost you ${fmt(testGrade(avgClean) - testGrade(rec.avg))} points of the test grade (BLO mean ${fmt(avgClean)} instead of ${fmt(rec.avg)}).${!rec.pass && passClean ? ' Leaving the ones you weren’t sure about blank would have been enough to pass.' : ''}</div></div>` : '';
   return `
     <div class="score-hero ${rec.pass ? 'pass' : 'fail'}">
-      <div class="num">${fmt(rec.avg)}</div>
+      <div class="num">${fmt(testGrade(rec.avg))}</div>
       <div class="res">${rec.pass ? I.check + 'Passed' : I.xmark + 'Failed'}</div>
-      <div class="sub">${heavy.length ? 'Weighted average' : 'Average'} · pass mark ${fmt(PASS)}</div>
+      <div class="sub">Test grade · pass mark ${fmt(PASS)}</div>
+      <div class="meta" style="margin-top:6px">${heavy.length ? 'Weighted BLO mean' : 'BLO mean'} ${fmt(rec.avg)} → 15 − 50 / ${fmt(rec.avg)}${rec.avg < MIN_MEAN ? ' · below 3.33, doesn’t count' : ''}</div>
       <div class="meta">${esc(rec.test)} · ${fmtDate(rec.at)} · ${fmtDur(rec.secs)}</div>
     </div>
     ${whatIf}
@@ -890,7 +896,7 @@ function mistakesOf(rec){
 
 function trendSvg(list){
   const xs = list.slice(-20), W = 320, H = 96, pad = 8;
-  const lo = Math.min(0, ...xs.map(a => a.avg)), hi = 10;
+  const lo = 0, hi = 10;
   const y = v => pad + (hi - v)/(hi - lo)*(H - 2*pad);
   const bw = W / Math.max(xs.length, 10);
   const css = getComputedStyle(document.documentElement);
@@ -899,8 +905,8 @@ function trendSvg(list){
     <line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="${sp}"/>
     <line x1="0" x2="${W}" y1="${y(PASS)}" y2="${y(PASS)}" stroke="${l2}" stroke-dasharray="3 3"/>
     <text x="${W - 2}" y="${y(PASS) - 4}" text-anchor="end" font-size="10" fill="${l2}" font-family="-apple-system,system-ui">Pass ${fmt(PASS)}</text>
-    ${xs.map((a, i) => { const y0 = y(0), y1 = y(a.avg);
-      return `<rect x="${(i*bw + bw*.22).toFixed(1)}" y="${Math.min(y0,y1).toFixed(1)}" width="${(bw*.56).toFixed(1)}" height="${Math.max(2, Math.abs(y1 - y0)).toFixed(1)}" rx="3" fill="${a.pass ? g : r}"><title>${fmt(a.avg)}</title></rect>`; }).join('')}
+    ${xs.map((a, i) => { const y0 = y(0), y1 = y(testGrade(a.avg));
+      return `<rect x="${(i*bw + bw*.22).toFixed(1)}" y="${Math.min(y0,y1).toFixed(1)}" width="${(bw*.56).toFixed(1)}" height="${Math.max(2, Math.abs(y1 - y0)).toFixed(1)}" rx="3" fill="${a.pass ? g : r}"><title>${fmt(testGrade(a.avg))}</title></rect>`; }).join('')}
   </svg>`;
 }
 
@@ -916,12 +922,12 @@ function renderHistory(){
     body = names.map(n => { const l = list.filter(a => a.test === n), last = l[l.length - 1];
       return `<div class="section"><div class="sec-head">${esc(n)}</div><div class="group">
         <div class="stats4">
-          <div><b>${l.length}</b><span>Attempts</span></div><div><b>${fmt(last.avg)}</b><span>Latest</span></div>
-          <div><b>${fmt(Math.max(...l.map(a => a.avg)))}</b><span>Best</span></div><div><b>${l.filter(a => a.pass).length}</b><span>Passed</span></div>
+          <div><b>${l.length}</b><span>Attempts</span></div><div><b>${fmt(testGrade(last.avg))}</b><span>Latest</span></div>
+          <div><b>${fmt(Math.max(...l.map(a => testGrade(a.avg))))}</b><span>Best</span></div><div><b>${l.filter(a => a.pass).length}</b><span>Passed</span></div>
         </div>${trendSvg(l)}</div></div>`; }).join('') +
       `<div class="section"><div class="sec-head">Attempts</div><div class="group">
         ${[...list].reverse().map(a => `<button class="row tap" data-id="${a.id}">
-            <span class="score-chip ${a.pass ? 'pass' : 'fail'}">${fmt(a.avg)}</span>
+            <span class="score-chip ${a.pass ? 'pass' : 'fail'}">${fmt(testGrade(a.avg))}</span>
             <span class="r-main"><span class="r-title">${esc(a.test)}</span><span class="r-sub" style="display:block">${fmtDate(a.at)} · ${fmtDur(a.secs)}</span></span>
             ${I.chevR}</button>`).join('')}
       </div></div>`;
