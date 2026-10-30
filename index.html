@@ -804,6 +804,17 @@ function resultBody(rec, mistakes){
   const totalW = rec.per.reduce((s,x) => s + wt(x.blo), 0);
   const heavy = rec.per.filter(x => wt(x.blo) > 1).map(x => 'BLO ' + x.blo);
   const w = mistakes.filter(m => m.pick >= 0).length, b = mistakes.length - w;
+  /* "what if": the same exam with every wrong answer left blank (wrong = 0 instead of −PENALTY) */
+  const clean = x => x.r * (PER_BLO / ((x.r + x.w + x.b) || PER_BLO));
+  const avgClean = rec.per.reduce((s,x) => s + clean(x)*wt(x.blo), 0) / totalW;
+  const wrongTotal = rec.per.reduce((s,x) => s + x.w, 0), passClean = avgClean >= PASS;
+  const whatIf = wrongTotal ? `
+    <div class="section"><div class="sec-head">If you had left the wrong ones blank</div><div class="group">
+      <div class="row"><span class="r-main"><span class="r-title">Grade without wrong answers</span>
+        <span class="r-sub" style="display:block">${plural(wrongTotal,'wrong answer')} counted as 0 instead of −${PENALTY}</span></span>
+        <span class="pill ${passClean ? 'green' : 'red'}">${passClean ? 'Pass' : 'Fail'}</span>
+        <span class="r-trail" style="font-weight:600;color:var(--label)">${fmt(avgClean)}</span></div>
+    </div><div class="sec-foot">Wrong answers cost you ${fmt(avgClean - rec.avg)} points of the average.${!rec.pass && passClean ? ' Leaving the ones you weren’t sure about blank would have been enough to pass.' : ''}</div></div>` : '';
   return `
     <div class="score-hero ${rec.pass ? 'pass' : 'fail'}">
       <div class="num">${fmt(rec.avg)}</div>
@@ -811,10 +822,11 @@ function resultBody(rec, mistakes){
       <div class="sub">${heavy.length ? 'Weighted average' : 'Average'} · pass mark ${fmt(PASS)}</div>
       <div class="meta">${esc(rec.test)} · ${fmtDate(rec.at)} · ${fmtDur(rec.secs)}</div>
     </div>
+    ${whatIf}
     <div class="section"><div class="sec-head">Blocks</div><div class="group">
       ${rec.per.map(x => `<div class="row indent blo-row"><span class="icon-sq" style="background:${BLO_COLOR[x.blo]}">${x.blo}</span>
           <span class="r-main"><span class="r-title">${BLO_NAMES[x.blo] || ''} ${wt(x.blo) > 1 ? '<span class="pill blue">×2</span>' : ''}</span>
-          <span class="r-sub" style="display:block">${x.r} right · ${x.w} wrong · ${x.b} blank</span></span>
+          <span class="r-sub" style="display:block">${x.r} right · ${x.w} wrong · ${x.b} blank${x.w ? ` · ${fmt(clean(x))} without wrong` : ''}</span></span>
           <span class="r-trail ${x.s < 0 ? 'neg' : ''}">${fmt(x.s)}</span></div>`).join('')}
     </div><div class="sec-foot">+1 per right answer, −${PENALTY} per wrong one, 0 for blanks; each block out of ${PER_BLO}.${heavy.length ? ` ${heavy.join(' and ')} count${heavy.length === 1 ? 's' : ''} double, so the average divides by ${totalW}.` : ''}</div></div>
     ${mistakes.length ? `
