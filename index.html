@@ -607,17 +607,44 @@ function blocksSheet(){
 /* ============================================================
    EXAM
    ============================================================ */
-const POS = (() => {
+/* Exam structure: each block copies the layout of a real paper (2016 onwards).
+   Every question is tagged F (has a picture), R (aircraft recognition / ICAO), C (calculation) or T (theory);
+   a random real paper of that block is used as a template and each slot is filled with an unused question of the same kind. */
+const REC = /ICAO|identify|aircraft (?:has|corresponds)|which (?:company|aircraft manufacturer)|wide.?body|narrow.?body|Boeing|Airbus|Embraer|Antonov|Cessna|wake turbulence|approach speed|categor/i;
+const plain = t => t.replace(/<[^>]+>/g, '');
+function qkind(q){
+  if(q.fig) return 'F';
+  const txt = plain(q.stem) + ' ' + q.opts.map(plain).join(' ');
+  const numeric = q.opts.filter(o => /\d/.test(plain(o)) && plain(o).length < 70).length >= 3;
+  if(CALC[q.id] || (numeric && !REC.test(txt))) return 'C';
+  if(REC.test(txt)) return 'R';
+  return 'T';
+}
+const KIND = new Map(QUESTIONS.map(q => [q.id, qkind(q)]));
+const TEMPLATES = (() => {
   const byPage = new Map();
   QUESTIONS.forEach(q => { if(!byPage.has(q.page)) byPage.set(q.page, []); byPage.get(q.page).push(q); });
-  const m = new Map();
-  byPage.forEach(list => { list.sort((a,b) => a.n - b.n);
-    list.forEach((q,i) => {
-      const calc = q.opts.filter(o => /\d/.test(o.replace(/<[^>]+>/g,'')) && o.length < 90).length >= 3;
-      m.set(q.id, (calc ? 2 : 0) + (list.length > 1 ? i/(list.length-1) : 0) + Math.random()*1e-3);
-    }); });
-  return m;
+  const t = {};
+  byPage.forEach(list => {
+    const blos = new Set(list.map(q => q.blo)), year = +(list[0].exam.match(/(\d{4})$/) || [0, 0])[1];
+    if(list.length < 8 || blos.size !== 1 || year < 2016 || list.some(q => q.orig)) return;
+    list.sort((a, b) => a.n - b.n);
+    (t[list[0].blo] = t[list[0].blo] || []).push({exam:list[0].exam, kinds:list.map(q => KIND.get(q.id))});
+  });
+  return t;
 })();
+const dupKey = q => plain(q.stem).toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + q.opts.map(o => plain(o).toLowerCase().replace(/[^a-z0-9]/g, '')).sort().join('|') + '|' + (q.fig ? q.fig.length : 0);
+
+function buildBlock(b){
+  const pool = shuffled(QUESTIONS.filter(q => q.blo === b));
+  const used = new Set(), taken = [];
+  const take = pred => { const q = pool.find(x => !used.has(dupKey(x)) && pred(x)); if(q){ used.add(dupKey(q)); taken.push(q); } return q; };
+  const ts = TEMPLATES[b];
+  const kinds = ts && ts.length ? ts[Math.random() * ts.length | 0].kinds.slice(0, PER_BLO) : [];
+  kinds.forEach(k => take(x => KIND.get(x.id) === k) || take(x => KIND.get(x.id) === 'T') || take(() => true));
+  while(taken.length < PER_BLO && take(() => true));
+  return taken;
+}
 const examBlos = () => S.examPreset === 'c' ? [...S.customBlos].sort((a,b) => a-b) : PRESETS.find(p => p.id === S.examPreset).blos;
 
 function renderExamTab(){
@@ -639,7 +666,7 @@ function renderExamTab(){
         : `<div class="row indent"><span class="icon-sq" style="background:${BLO_COLOR[b]}">${b}</span>
              <span class="r-main"><span class="r-title">${BLO_NAMES[b]}</span></span>
              ${wt(b) > 1 ? '<span class="pill blue">×2</span>' : ''}<span class="r-trail">${PER_BLO}</span></div>`).join('')}
-    </div><div class="sec-foot">${blos.length ? `${blos.length * PER_BLO} questions, ${PER_BLO} per block, theory first and calculations last.` : 'Turn on at least one block.'}</div></div>
+    </div><div class="sec-foot">${blos.length ? `${blos.length * PER_BLO} questions, ${PER_BLO} per block, laid out like a real past paper of each block.` : 'Turn on at least one block.'}</div></div>
     <div class="section"><div class="sec-head">Scoring</div><div class="group">
       <div class="row"><span class="r-main r-title">Right answer</span><span class="r-trail">+1</span></div>
       <div class="row"><span class="r-main r-title">Wrong answer</span><span class="r-trail">−${PENALTY}</span></div>
@@ -656,7 +683,7 @@ function renderExamTab(){
 function startExam(){
   const blos = examBlos(); if(!blos.length) return;
   const qs = [];
-  blos.forEach(b => qs.push(...shuffled(QUESTIONS.filter(q => q.blo === b)).slice(0, PER_BLO).sort((x,y) => POS.get(x.id) - POS.get(y.id))));
+  blos.forEach(b => qs.push(...buildBlock(b)));
   S.exam = {qs, orders:qs.map(() => shuffled([0,1,2,3])), ans:qs.map(() => null), i:0, blos, started:Date.now()};
   $('#examview').hidden = false; $('#tabbar').hidden = true;
   renderExam();
