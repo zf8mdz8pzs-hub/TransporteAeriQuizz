@@ -493,7 +493,7 @@ const ansBtn = (q, orig, slot, extra = '') =>
    PRACTICE
    ============================================================ */
 const selection = () => QUESTIONS.filter(q => S.blos.has(q.blo) && (!S.figsOnly || q.fig));
-function buildPool(list){ S.pool = shuffled(list ?? selection()); S.i = 0; S.locked = false; S.cur = null; }
+function buildPool(list){ S.pool = wshuffled(list ?? selection()); S.i = 0; S.locked = false; S.cur = null; }
 const resetScore = () => Object.assign(S, {seen:0, hits:0, streak:0, best:0, missed:[]});
 function selectionName(){
   const p = presetOf([...S.blos]);
@@ -635,8 +635,25 @@ const TEMPLATES = (() => {
 })();
 const dupKey = q => plain(q.stem).toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + q.opts.map(o => plain(o).toLowerCase().replace(/[^a-z0-9]/g, '')).sort().join('|') + '|' + (q.fig ? q.fig.length : 0);
 
+/* Questions that came up in several recent papers (2021 onwards) get a slightly higher chance:
+   the same question with the same options and picture, or a calculation template reused with new numbers. */
+const RECENT_FROM = 2021;
+const qYear = q => +(q.exam.match(/(\d{4})$/) || [0, 0])[1];
+const tmplKey = q => plain(q.stem).toLowerCase().replace(/\d+(\.\d+)?/g, '#').replace(/[^a-z#]/g, '').slice(0, 110);
+const RECENT_FREQ = (() => {
+  const exact = new Map(), tmpl = new Map(), add = (m, k, e) => { if(!m.has(k)) m.set(k, new Set()); m.get(k).add(e); };
+  QUESTIONS.forEach(q => { if(qYear(q) >= RECENT_FROM){ add(exact, dupKey(q), q.exam); if(KIND.get(q.id) === 'C') add(tmpl, q.blo + tmplKey(q), q.exam); } });
+  return new Map(QUESTIONS.map(q => [q.id, Math.max(
+    (exact.get(dupKey(q)) || new Set()).size,
+    KIND.get(q.id) === 'C' ? (tmpl.get(q.blo + tmplKey(q)) || new Set()).size : 0)]));
+})();
+/* 1× for one-offs, then +0.5 per extra recent paper, capped at 2.5× */
+const qWeight = q => Math.min(2.5, 1 + 0.5 * Math.max(0, (RECENT_FREQ.get(q.id) || 0) - 1));
+/* weighted shuffle (Efraimidis–Spirakis): heavier questions tend to come first, nothing is excluded */
+const wshuffled = a => a.map(q => [Math.pow(Math.random(), 1 / qWeight(q)), q]).sort((x, y) => y[0] - x[0]).map(x => x[1]);
+
 function buildBlock(b){
-  const pool = shuffled(QUESTIONS.filter(q => q.blo === b));
+  const pool = wshuffled(QUESTIONS.filter(q => q.blo === b));
   const used = new Set(), taken = [];
   const take = pred => { const q = pool.find(x => !used.has(dupKey(x)) && pred(x)); if(q){ used.add(dupKey(q)); taken.push(q); } return q; };
   const ts = TEMPLATES[b];
