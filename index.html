@@ -342,6 +342,9 @@ const PENALTY = 0.33, PASS = 5, PER_BLO = 10;
 /* Course formula: test grade = 15 − 50 / (BLO mean). A mean below 3.33 doesn't count (grade 0).
    Grade 5 happens exactly at a mean of 5, so "pass" is the same either way. */
 const MIN_MEAN = 10 / 3;
+/* Course projection (your numbers): final = 40% project + 25% each test + 10% deliverables */
+const COURSE = {project:7.82, deliverables:0, wProject:0.40, wTest:0.25, wDeliv:0.10, pass:5};
+const meanForGrade = g => 50 / (15 - g);
 const testGrade = mean => mean < MIN_MEAN - 1e-9 ? 0 : Math.min(10, Math.max(0, 15 - 50 / mean));
 const WEIGHT = {1:2, 3:2};
 const wt = b => WEIGHT[b] || 1;
@@ -820,6 +823,26 @@ function resultBody(rec, mistakes){
         <span class="pill ${passClean ? 'green' : 'red'}">${passClean ? 'Pass' : 'Fail'}</span>
         <span class="r-trail" style="font-weight:600;color:var(--label)">${fmt(testGrade(avgClean))}</span></div>
     </div><div class="sec-foot">Wrong answers cost you ${fmt(testGrade(avgClean) - testGrade(rec.avg))} points of the test grade (BLO mean ${fmt(avgClean)} instead of ${fmt(rec.avg)}).${!rec.pass && passClean ? ' Leaving the ones you weren’t sure about blank would have been enough to pass.' : ''}</div></div>` : '';
+  const g = testGrade(rec.avg);
+  const base = COURSE.wProject*COURSE.project + COURSE.wDeliv*COURSE.deliverables;
+  const course = base + COURSE.wTest*g, coursePass = course >= COURSE.pass - 1e-9;
+  const need = (COURSE.pass - base - COURSE.wTest*g) / COURSE.wTest;
+  const needTxt = need <= 0 ? 'Not needed'
+    : need > 10 ? 'Not reachable'
+    : `${fmt(need)}`;
+  const needSub = need <= 0 ? 'You pass with this test alone'
+    : need > 10 ? 'Even a 10 in the other test isn’t enough'
+    : `BLO mean of at least ${fmt(Math.max(MIN_MEAN, meanForGrade(need)))} in the other test`;
+  const courseHtml = `
+    <div class="section"><div class="sec-head">Course grade · deliverables ${fmt(COURSE.deliverables)}</div><div class="group">
+      <div class="row"><span class="r-main"><span class="r-title">With this test only</span>
+        <span class="r-sub" style="display:block">${fmt(COURSE.project)} × 40% + ${fmt(g)} × 25%, other test 0</span></span>
+        <span class="pill ${coursePass ? 'green' : 'red'}">${coursePass ? 'Pass' : 'Fail'}</span>
+        <span class="r-trail" style="font-weight:600;color:var(--label)">${fmt(course)}</span></div>
+      <div class="row"><span class="r-main"><span class="r-title">Other test needed to pass</span>
+        <span class="r-sub" style="display:block">${needSub}</span></span>
+        <span class="r-trail" style="font-weight:600;color:var(--label)">${needTxt}</span></div>
+    </div><div class="sec-foot">Assumes your project mark of ${fmt(COURSE.project)} and deliverables at 0 (below 80%). Reaching 80% in deliverables would add at least 0.50 to the course grade.</div></div>`;
   return `
     <div class="score-hero ${rec.pass ? 'pass' : 'fail'}">
       <div class="num">${fmt(testGrade(rec.avg))}</div>
@@ -828,6 +851,7 @@ function resultBody(rec, mistakes){
       <div class="meta" style="margin-top:6px">${heavy.length ? 'Weighted BLO mean' : 'BLO mean'} ${fmt(rec.avg)} → 15 − 50 / ${fmt(rec.avg)}${rec.avg < MIN_MEAN ? ' · below 3.33, doesn’t count' : ''}</div>
       <div class="meta">${esc(rec.test)} · ${fmtDate(rec.at)} · ${fmtDur(rec.secs)}</div>
     </div>
+    ${courseHtml}
     ${whatIf}
     <div class="section"><div class="sec-head">Blocks</div><div class="group">
       ${rec.per.map(x => `<div class="row indent blo-row"><span class="icon-sq" style="background:${BLO_COLOR[x.blo]}">${x.blo}</span>
